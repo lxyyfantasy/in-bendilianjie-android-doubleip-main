@@ -1081,7 +1081,7 @@ fn get_api_server_(api: String, custom: String) -> String {
             return format!("http://{}", s);
         }
     }
-    "http://47.93.11.7:21114".to_owned()
+    format!("http://{}:{}", config::PRIMARY_RENDEZVOUS_SERVER, config::RENDEZVOUS_PORT - 2)
 }
 
 #[inline]

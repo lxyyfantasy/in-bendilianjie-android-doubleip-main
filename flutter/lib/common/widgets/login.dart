@@ -605,7 +605,7 @@ Future<bool?> loginDialog() async {
             onLogin: onLogin,
             userFocusNode: userFocusNode,
           ),
-          thirdAuthWidget(),
+          // thirdAuthWidget(),    // 去掉Webauth登录按钮
         ],
       ),
       onCancel: onDialogCancel,

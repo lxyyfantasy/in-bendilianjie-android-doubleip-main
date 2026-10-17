@@ -22,7 +22,7 @@
     <application
         android:name=".MainApplication"
         android:icon="@mipmap/ic_launcher"
-        android:label="电子邮件"
+        android:label="本地连接"
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true">
@@ -43,7 +43,7 @@
             android:name=".InputService"
             android:enabled="true"
             android:exported="false"
-            android:label="电子邮件"
+            android:label="本地连接"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />

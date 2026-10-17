@@ -16,20 +16,26 @@ class DesktopRemoteScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-        providers: [
-          ChangeNotifierProvider.value(value: gFFI.ffiModel),
-          ChangeNotifierProvider.value(value: gFFI.imageModel),
-          ChangeNotifierProvider.value(value: gFFI.cursorModel),
-          ChangeNotifierProvider.value(value: gFFI.canvasModel),
-        ],
-        child: Scaffold(
-          // Set transparent background for padding the resize area out of the flutter view.
-          // This allows the wallpaper goes through our resize area. (Linux only now).
-          backgroundColor: isLinux ? Colors.transparent : null,
-          body: ConnectionTabPage(
-            params: params,
-          ),
-        ));
+    return ConstrainedBox(
+      constraints: const BoxConstraints(
+        maxWidth: 380,
+        maxHeight: 755,
+      ),
+      child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: gFFI.ffiModel),
+            ChangeNotifierProvider.value(value: gFFI.imageModel),
+            ChangeNotifierProvider.value(value: gFFI.cursorModel),
+            ChangeNotifierProvider.value(value: gFFI.canvasModel),
+          ],
+          child: Scaffold(
+            // Set transparent background for padding the resize area out of the flutter view.
+            // This allows the wallpaper goes through our resize area. (Linux only now).
+            backgroundColor: isLinux ? Colors.transparent : null,
+            body: ConnectionTabPage(
+              params: params,
+            ),
+          )),
+    );
   }
 }

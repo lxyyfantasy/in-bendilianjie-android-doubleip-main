@@ -215,12 +215,15 @@ header caption {
   }
   button.window#minimize {
     right: 84px;
+    // display: none;
   }
   button.window#maximize {
     right: 42px;
+    // display: none;
   }
   button.window#close {
     right: 0px;
+    // display: none;
   }
   button.window#minimize div {
     height: 3px;

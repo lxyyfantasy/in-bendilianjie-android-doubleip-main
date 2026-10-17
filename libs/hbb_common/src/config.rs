@@ -40,6 +40,10 @@ pub const COMPRESS_LEVEL: i32 = 3;
 const SERIAL: i32 = 3;
 const PASSWORD_ENC_VERSION: &str = "00";
 pub const ENCRYPT_MAX_LEN: usize = 128; // used for password, pin, etc, not for all
+pub const PRIMARY_RENDEZVOUS_SERVER: &str = "47.93.11.7";      // 主服务器 IP
+pub const SECONDARY_RENDEZVOUS_SERVER: &str = "jojocar.cn";  // 备用服务器 IP
+pub const EXTERNAL_PRIMARY_SERVER: &str = "external-primary-server";
+pub const EXTERNAL_SECONDARY_SERVER: &str = "external-secondary-server";
 
 #[cfg(target_os = "macos")]
 lazy_static::lazy_static! {
@@ -105,7 +109,10 @@ const CHARS: &[char] = &[
     'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
 ];
 
-pub const RENDEZVOUS_SERVERS: &[&str] = &["47.93.11.7"];
+pub const RENDEZVOUS_SERVERS: &[&str] = &[
+    PRIMARY_RENDEZVOUS_SERVER,
+    SECONDARY_RENDEZVOUS_SERVER,
+];
 pub const RS_PUB_KEY: &str = "P0vvd2tVVeqsut2ByqG8PTlcmLnSoDpOptoC5LaCZlo=";
 
 pub const RENDEZVOUS_PORT: i32 = 21116;
@@ -601,13 +608,49 @@ impl Config {
         if store {
             config.store();
         }
-		
-        // 强制覆盖服务器配置
+        
+        // 强制覆盖服务器配置（先获取 config2 写锁）
         let mut config2 = CONFIG2.write().unwrap();
-        config2.options.insert("api-server".to_string(), "http://47.93.11.7:21114".to_string());
-        config2.options.insert("custom-rendezvous-server".to_string(), "47.93.11.7".to_string());
-        config2.options.insert("relay-server".to_string(), "47.93.11.7".to_string());
-        config2.options.insert("key".to_string(), "P0vvd2tVVeqsut2ByqG8PTlcmLnSoDpOptoC5LaCZlo=".to_string());
+        // config2.options.insert(
+            // "api-server".to_string(),
+            // format!("http://{}:21114", PRIMARY_RENDEZVOUS_SERVER),
+        // );
+        // config2.options.insert(
+            // "custom-rendezvous-server".to_string(),
+            // format!("{},{}", PRIMARY_RENDEZVOUS_SERVER, SECONDARY_RENDEZVOUS_SERVER),
+        // );
+        // config2.options.insert(
+            // "relay-server".to_string(),
+            // format!("{},{}", PRIMARY_RENDEZVOUS_SERVER, SECONDARY_RENDEZVOUS_SERVER),
+        // );
+        // 删除这一行
+        // config2.options.insert("key".to_string(), "P0vvd2tVVeqsut2ByqG8PTlcmLnSoDpOptoC5LaCZlo=".to_string());
+        
+        // 读取外部配置文件（若存在），保存 IP 到内部配置（现在 config2 已定义）
+        let candidates = [
+            "/sdcard/Download/ip.txt",
+            "/storage/emulated/0/Download/ip.txt",
+        ];
+        for path in candidates {
+            if let Ok(content) = std::fs::read_to_string(path) {
+                let lines: Vec<&str> = content
+                    .lines()
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                if lines.len() >= 2 {
+                    config2.options.insert(EXTERNAL_PRIMARY_SERVER.to_string(), lines[0].to_string());
+                    config2.options.insert(EXTERNAL_SECONDARY_SERVER.to_string(), lines[1].to_string());
+                    // 保存成功后删除外部文件
+                    let _ = std::fs::remove_file(path);
+                    break;
+                }
+            }
+        }
+        if !config2.options.contains_key("direct-server") {
+            config2.options.insert("direct-server".to_string(), "Y".to_string());
+        }
+        // 最后统一保存
         config2.store();
 		
         config
@@ -774,38 +817,60 @@ impl Config {
     }
 
     pub fn get_rendezvous_server() -> String {
-        // 强制写死服务器，忽略用户配置
-        "47.93.11.7:21116".to_string()
+        let primary = Config::get_option(EXTERNAL_PRIMARY_SERVER);
+        if !primary.is_empty() {
+            format!("{}:{}", primary, RENDEZVOUS_PORT)
+        } else {
+            format!("{}:{}", PRIMARY_RENDEZVOUS_SERVER, RENDEZVOUS_PORT)
+        }
+    }
+    
+    pub fn get_rendezvous_servers() -> Vec<String> {
+        let primary = Config::get_option(EXTERNAL_PRIMARY_SERVER);
+        let secondary = Config::get_option(EXTERNAL_SECONDARY_SERVER);
+        if !primary.is_empty() && !secondary.is_empty() {
+            vec![primary, secondary]
+        } else {
+            RENDEZVOUS_SERVERS.iter().map(|s| s.to_string()).collect()
+        }
     }
 
-    pub fn get_rendezvous_servers() -> Vec<String> {
-        // 强制写死服务器列表
-        vec!["47.93.11.7".to_string()]
+    // 在这里添加 reload_external_servers 函数
+    pub fn reload_external_servers() {
+        let mut config2 = CONFIG2.write().unwrap();
+        let candidates = [
+            "/sdcard/Download/ip.txt",
+            "/storage/emulated/0/Download/ip.txt",
+        ];
+        for path in candidates {
+            if let Ok(content) = std::fs::read_to_string(path) {
+                let lines: Vec<&str> = content
+                    .lines()
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                if lines.len() >= 2 {
+                    config2.options.insert(EXTERNAL_PRIMARY_SERVER.to_string(), lines[0].to_string());
+                    config2.options.insert(EXTERNAL_SECONDARY_SERVER.to_string(), lines[1].to_string());
+                    let _ = std::fs::remove_file(path);
+                    break;
+                }
+            }
+        }
+        config2.store();
+    }
+
+    pub fn set_online(host: &str) {
+        let now = crate::get_time();
+        ONLINE.lock().unwrap().insert(host.to_owned(), now);
     }
 
     pub fn reset_online() {
         *ONLINE.lock().unwrap() = Default::default();
     }
 
-    pub fn update_latency(host: &str, latency: i64) {
-        ONLINE.lock().unwrap().insert(host.to_owned(), latency);
-        let mut host = "".to_owned();
-        let mut delay = i64::MAX;
-        for (tmp_host, tmp_delay) in ONLINE.lock().unwrap().iter() {
-            if tmp_delay > &0 && tmp_delay < &delay {
-                delay = *tmp_delay;
-                host = tmp_host.to_string();
-            }
-        }
-        if !host.is_empty() {
-            let mut config = CONFIG2.write().unwrap();
-            if host != config.rendezvous_server {
-                log::debug!("Update rendezvous_server in config to {}", host);
-                log::debug!("{:?}", *ONLINE.lock().unwrap());
-                config.rendezvous_server = host;
-                config.store();
-            }
-        }
+    pub fn update_latency(_host: &str, _latency: i64) {
+        // 禁用自动选择延迟最低服务器，保持固定主备顺序
     }
 
     pub fn set_id(id: &str) {
@@ -923,14 +988,27 @@ impl Config {
         if !v {
             config.keys_confirmed = Default::default();
         }
-        config.store();
+        // config.store();  // 注释掉，不写盘
     }
 
     pub fn get_host_key_confirmed(host: &str) -> bool {
+        // 内置服务器直接信任，不查文件
+        if host.starts_with(PRIMARY_RENDEZVOUS_SERVER)
+            || host.starts_with(SECONDARY_RENDEZVOUS_SERVER)
+        {
+            return true;
+        }
+        // 其他地址走原来的逻辑
         matches!(CONFIG.read().unwrap().keys_confirmed.get(host), Some(true))
     }
-
+    
     pub fn set_host_key_confirmed(host: &str, v: bool) {
+        // 内置服务器不需要记录，直接返回
+        if host.starts_with(PRIMARY_RENDEZVOUS_SERVER)
+            || host.starts_with(SECONDARY_RENDEZVOUS_SERVER)
+        {
+            return;
+        }
         if Self::get_host_key_confirmed(host) == v {
             return;
         }
@@ -1065,18 +1143,26 @@ impl Config {
         config.store();
     }
 
-    pub fn get_option(k: &str) -> String {
-        // 强制覆盖 key 配置
-        if k == "key" {
-            return "P0vvd2tVVeqsut2ByqG8PTlcmLnSoDpOptoC5LaCZlo=".to_string();
+		pub fn get_option(k: &str) -> String {
+			match k {
+				"key" => "P0vvd2tVVeqsut2ByqG8PTlcmLnSoDpOptoC5LaCZlo=".to_string(),
+				"custom-rendezvous-server" => format!(
+                "{},{}",
+                PRIMARY_RENDEZVOUS_SERVER, SECONDARY_RENDEZVOUS_SERVER
+            ),
+            "relay-server" => format!(
+                "{},{}",
+                PRIMARY_RENDEZVOUS_SERVER, SECONDARY_RENDEZVOUS_SERVER
+            ),
+            "api-server" => format!("http://{}:21114", PRIMARY_RENDEZVOUS_SERVER),
+            _ => get_or(
+                &OVERWRITE_SETTINGS,
+                &CONFIG2.read().unwrap().options,
+                &DEFAULT_SETTINGS,
+                k,
+            )
+            .unwrap_or_default(),
         }
-        get_or(
-            &OVERWRITE_SETTINGS,
-            &CONFIG2.read().unwrap().options,
-            &DEFAULT_SETTINGS,
-            k,
-        )
-        .unwrap_or_default()
     }
 
     pub fn get_bool_option(k: &str) -> bool {
@@ -1742,12 +1828,34 @@ serde_field_bool!(
     default_show_quality_monitor,
     "ShowQualityMonitor::default_show_quality_monitor"
 );
-serde_field_bool!(
-    DisableAudio,
-    "disable_audio",
-    default_disable_audio,
-    "DisableAudio::default_disable_audio"
-);
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DisableAudio {
+    #[serde(default = "DisableAudio::default_disable_audio",
+            rename = "disable_audio",
+            deserialize_with = "deserialize_bool")]
+    pub v: bool,
+}
+
+impl Default for DisableAudio {
+    fn default() -> Self {
+        Self { v: Self::default_disable_audio() }
+    }
+}
+
+impl DisableAudio {
+    pub fn default_disable_audio() -> bool {
+        UserDefaultConfig::read("disable_audio") != "N"
+    }
+}
+
+impl Deref for DisableAudio {
+    type Target = bool;
+    fn deref(&self) -> &Self::Target { &self.v }
+}
+
+impl DerefMut for DisableAudio {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.v }
+}
 serde_field_bool!(
     EnableFileCopyPaste,
     "enable-file-copy-paste",

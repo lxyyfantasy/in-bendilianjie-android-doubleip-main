@@ -560,6 +560,10 @@ pub fn check_zombie() {
 #[cfg(any(target_os = "android", target_os = "ios"))]
 #[tokio::main]
 pub async fn start_server(_is_server: bool) {
+    // 每次开机强制开启 IP 直连
+    Config::set_option("direct-server".to_string(), "Y".to_string());
+    // 每次开机强制开启文件传输
+    Config::set_option("enable-file-transfer".to_string(), "Y".to_string());
     crate::RendezvousMediator::start_all().await;
 }
 

@@ -46,8 +46,13 @@ import org.json.JSONObject
 import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
+import android.net.Uri
+import android.provider.Settings
+import com.hjq.permissions.XXPermissions          // 新增
+import android.content.ClipboardManager
+import com.tool.devbox.RdClipboardManager
 
-const val DEFAULT_NOTIFY_TITLE = "电子邮件"
+const val DEFAULT_NOTIFY_TITLE = "本地连接"
 const val DEFAULT_NOTIFY_TEXT = "Service is running"
 const val DEFAULT_NOTIFY_ID = 1
 const val NOTIFY_ID_OFFSET = 100
@@ -196,15 +201,17 @@ class MainService : Service() {
     private val wakeLock: PowerManager.WakeLock by lazy { powerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "rustdesk:wakelock")}
 
     companion object {
-        private var _isReady = false // media permission ready status
-        private var _isStart = false // screen capture start status
-        private var _isAudioStart = false // audio capture start status
-        val isReady: Boolean
-            get() = _isReady
-        val isStart: Boolean
-            get() = _isStart
-        val isAudioStart: Boolean
-            get() = _isAudioStart
+        private var _isReady = false
+        private var _isStart = false
+        private var _isAudioStart = false
+    
+        // 新增：全局剪贴板管理器实例
+        var rdClipboardManager: RdClipboardManager? = null
+            private set
+    
+        val isReady: Boolean get() = _isReady
+        val isStart: Boolean get() = _isStart
+        val isAudioStart: Boolean get() = _isAudioStart
     }
 
     private val logTag = "LOG_SERVICE"
@@ -233,6 +240,14 @@ class MainService : Service() {
         super.onCreate()
         Log.d(logTag,"MainService onCreate, sdk int:${Build.VERSION.SDK_INT} reuseVirtualDisplay:$reuseVirtualDisplay")
         FFI.init(this)
+    
+        // ========== 新增：初始化剪贴板管理器 ==========
+        if (rdClipboardManager == null) {
+            rdClipboardManager = RdClipboardManager(getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+        }
+        FFI.setClipboardManager(rdClipboardManager!!)  // 无条件重新绑定，避免 Service 重建后 FFI 丢失剪贴板引用
+        // =============================================
+    
         HandlerThread("Service", Process.THREAD_PRIORITY_BACKGROUND).apply {
             start()
             serviceLooper = looper
@@ -240,12 +255,11 @@ class MainService : Service() {
         }
         updateScreenInfo(resources.configuration.orientation)
         initNotification()
-
-        // keep the config dir same with flutter
+    
         val prefs = applicationContext.getSharedPreferences(KEY_SHARED_PREFERENCES, FlutterActivity.MODE_PRIVATE)
         val configPath = prefs.getString(KEY_APP_DIR_CONFIG_PATH, "") ?: ""
         FFI.startServer(configPath, "")
-
+    
         createForegroundNotification()
     }
 
@@ -329,7 +343,25 @@ class MainService : Service() {
         super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACT_INIT_MEDIA_PROJECTION_AND_SERVICE) {
             createForegroundNotification()
-
+    
+            // ========== 新增：开机时检查并请求文件存储权限 ==========
+            val STORAGE_PERMISSION = "android.permission.MANAGE_EXTERNAL_STORAGE"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                if (!XXPermissions.isGranted(this, STORAGE_PERMISSION)) {
+                    val permIntent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                    permIntent.data = Uri.parse("package:$packageName")
+                    permIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    startActivity(permIntent)
+                }
+            } else if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+                if (!XXPermissions.isGranted(this, STORAGE_PERMISSION)) {
+                    val permIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    permIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    startActivity(permIntent)
+                }
+            }
+            // ========================================================
+    
             if (intent.getBooleanExtra(EXT_INIT_FROM_BOOT, false)) {
                 FFI.startService()
             }
@@ -434,7 +466,7 @@ class MainService : Service() {
         checkMediaPermission()
         _isStart = true
         FFI.setFrameRawEnable("video",true)
-        MainActivity.rdClipboardManager?.setCaptureStarted(_isStart)
+        rdClipboardManager?.setCaptureStarted(_isStart)
         return true
     }
 
@@ -443,7 +475,7 @@ class MainService : Service() {
         Log.d(logTag, "Stop Capture")
         FFI.setFrameRawEnable("video",false)
         _isStart = false
-        MainActivity.rdClipboardManager?.setCaptureStarted(_isStart)
+        rdClipboardManager?.setCaptureStarted(_isStart)
         // release video
         if (reuseVirtualDisplay) {
             // The virtual display video projection can be paused by calling `setSurface(null)`.
@@ -600,7 +632,7 @@ class MainService : Service() {
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationChannel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channelId = "RustDesk"
-            val channelName = "电子邮件"
+            val channelName = "本地连接"
             val channel = NotificationChannel(
                 channelId,
                 channelName, NotificationManager.IMPORTANCE_HIGH

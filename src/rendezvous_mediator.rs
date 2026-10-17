@@ -100,30 +100,20 @@ impl RendezvousMediator {
             if !config::option2bool("stop-service", &Config::get_option("stop-service"))
                 && !crate::platform::installing_service()
             {
-                let mut futs = Vec::new();
-                let servers = Config::get_rendezvous_servers();
                 SHOULD_EXIT.store(false, Ordering::SeqCst);
                 MANUAL_RESTARTED.store(false, Ordering::SeqCst);
-                for host in servers.clone() {
-                    let server = server.clone();
-                    let timeout = timeout.clone();
-                    futs.push(tokio::spawn(async move {
-                        if let Err(err) = Self::start(server, host).await {
-                            let err = format!("rendezvous mediator error: {err}");
-                            // When user reboot, there might be below error, waiting too long
-                            // (CONNECT_TIMEOUT 18s) will make user think there is bug
-                            if err.contains("10054") || err.contains("11001") {
-                                // No such host is known. (os error 11001)
-                                // An existing connection was forcibly closed by the remote host. (os error 10054): also happens for UDP
-                                *timeout.write().unwrap() = 3000;
-                            }
-                            log::error!("{err}");
-                        }
-                        // SHOULD_EXIT here is to ensure once one exits, the others also exit.
-                        SHOULD_EXIT.store(true, Ordering::SeqCst);
-                    }));
+                let servers = Config::get_rendezvous_servers();
+                for host in servers {
+                    if SHOULD_EXIT.load(Ordering::SeqCst) || MANUAL_RESTARTED.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    log::info!("尝试连接服务器: {}", host);
+                    if let Err(err) = Self::start(server.clone(), host.clone()).await {
+                        log::error!("连接 {} 失败: {}", host, err);
+                        // 等待 1 秒后尝试下一个服务器
+                        sleep(1.).await;
+                    }
                 }
-                join_all(futs).await;
             } else {
                 server.write().unwrap().close_connections();
             }
@@ -170,12 +160,10 @@ impl RendezvousMediator {
         const MAX_REG_TIMEOUT: i64 = 30_000;
         let mut reg_timeout = MIN_REG_TIMEOUT;
         const MAX_FAILS1: i64 = 2;
-        const MAX_FAILS2: i64 = 4;
-        const DNS_INTERVAL: i64 = 60_000;
+        const MAX_FAILS2: i64 = 2;
         let mut fails = 0;
         let mut last_register_resp: Option<Instant> = None;
         let mut last_register_sent: Option<Instant> = None;
-        let mut last_dns_check = Instant::now();
         let mut old_latency = 0;
         let mut ema_latency = 0;
         loop {
@@ -240,18 +228,12 @@ impl RendezvousMediator {
                         if timeout {
                             fails += 1;
                             if fails >= MAX_FAILS2 {
-                                Config::update_latency(&host, -1);
-                                old_latency = 0;
-                                if last_dns_check.elapsed().as_millis() as i64 > DNS_INTERVAL {
-                                    // in some case of network reconnect (dial IP network),
-                                    // old UDP socket not work any more after network recover
-                                    if let Some((s, new_addr)) = socket_client::rebind_udp_for(&rz.host).await? {
-                                        socket = s;
-                                        rz.addr = new_addr.clone();
-                                        addr = new_addr;
-                                    }
-                                    last_dns_check = Instant::now();
-                                }
+                                // 服务器不可达，直接返回错误，让外层循环尝试下一个服务器
+                                bail!(
+                                    "UDP server {} unreachable after {} consecutive registration timeouts",
+                                    host,
+                                    fails
+                                );
                             } else if fails >= MAX_FAILS1 {
                                 Config::update_latency(&host, 0);
                                 old_latency = 0;
@@ -277,6 +259,7 @@ impl RendezvousMediator {
         match msg {
             Some(rendezvous_message::Union::RegisterPeerResponse(rpr)) => {
                 update_latency();
+                Config::set_online(&self.host);  // 标记服务器在线
                 if rpr.request_pk {
                     log::info!("request_pk received from {}", self.host);
                     self.register_pk(sink).await?;
@@ -739,15 +722,9 @@ impl RendezvousMediator {
         Ok(())
     }
 
-    fn get_relay_server(&self, provided_by_rendezvous_server: String) -> String {
-        let mut relay_server = Config::get_option("relay-server");
-        if relay_server.is_empty() {
-            relay_server = provided_by_rendezvous_server;
-        }
-        if relay_server.is_empty() {
-            relay_server = crate::increase_port(&self.host, 1);
-        }
-        relay_server
+    fn get_relay_server(&self, _provided_by_rendezvous_server: String) -> String {
+        // 中继始终跟随当前 ID 服务器：ID 端口 +1
+        crate::increase_port(&self.host, 1)
     }
 }
 

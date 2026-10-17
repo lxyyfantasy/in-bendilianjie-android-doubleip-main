@@ -19,6 +19,8 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityManager
+import android.provider.Settings    // ← 添加这行
 import android.media.MediaCodecInfo
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
 import android.media.MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar
@@ -38,9 +40,6 @@ import kotlin.concurrent.thread
 class MainActivity : FlutterActivity() {
     companion object {
         var flutterMethodChannel: MethodChannel? = null
-        private var _rdClipboardManager: RdClipboardManager? = null
-        val rdClipboardManager: RdClipboardManager?
-            get() = _rdClipboardManager;
     }
 
     private val channelTag = "mChannel"
@@ -73,6 +72,8 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        // 在这里添加
+        FFI.reloadExternalServers()
         val inputPer = InputService.isOpen
         runOnUiThread {
             flutterMethodChannel?.invokeMethod(
@@ -98,10 +99,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (_rdClipboardManager == null) {
-            _rdClipboardManager = RdClipboardManager(getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-            FFI.setClipboardManager(_rdClipboardManager!!)
-        }
+        // 剪贴板管理器已在 MainService 中初始化，无需在此重复创建
     }
 
     override fun onDestroy() {
@@ -226,7 +224,7 @@ class MainActivity : FlutterActivity() {
 
                 }
                 "try_sync_clipboard" -> {
-                    rdClipboardManager?.syncClipboard(true)
+                    MainService.rdClipboardManager?.syncClipboard(true)
                     result.success(true)
                 }
                 GET_START_ON_BOOT_OPT -> {
@@ -266,11 +264,21 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                 }
-                "on_voice_call_started" -> {
-                    onVoiceCallStarted()
-                }
                 "on_voice_call_closed" -> {
                     onVoiceCallClosed()
+                }
+                "check_accessibility" -> {
+                    try {
+                        val enabledServices = Settings.Secure.getString(
+                            contentResolver,
+                            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+                        )
+                        val enabled = enabledServices?.contains(packageName) == true
+                        result.success(enabled)
+                    } catch (e: Exception) {
+                        Log.e(logTag, "check_accessibility error: ${e.message}", e)
+                        result.success(false)
+                    }
                 }
                 else -> {
                     result.error("-1", "No such method", null)

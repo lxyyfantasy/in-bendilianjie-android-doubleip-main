@@ -171,7 +171,7 @@ void runMainApp(bool startService) async {
       rustDeskWinManager.registerActiveWindow(kWindowMainId);
     }
     windowManager.setOpacity(1);
-    windowManager.setTitle("电子邮件");
+    windowManager.setTitle("本地连接");
     // Do not use `windowManager.setResizable()` here.
     setResizable(!bind.isIncomingOnly());
   });
@@ -194,7 +194,7 @@ void runMultiWindow(
   String appType,
 ) async {
   await initEnv(appType);
-  final title = "电子邮件";
+  final title = "本地连接";
   // set prevent close to true, we handle close event manually
   WindowController.fromWindowId(kWindowId!).setPreventClose(true);
   if (isMacOS) {
@@ -246,13 +246,20 @@ void runMultiWindow(
     case kAppTypeDesktopRemote:
       // If screen rect is set, the window will be moved to the target screen and then set fullscreen.
       if (argument['screen_rect'] == null) {
-        // display can be used to control the offset of the window.
-        await restoreWindowPosition(
-          WindowType.RemoteDesktop,
-          windowId: kWindowId!,
-          peerId: argument['id'] as String?,
-          display: argument['display'] as int?,
-        );
+        if (argument['id'] != null) {
+          // 有 peer：恢复 peer 保存的位置和尺寸
+          await restoreWindowPosition(
+            WindowType.RemoteDesktop,
+            windowId: kWindowId!,
+            peerId: argument['id'] as String?,
+            display: argument['display'] as int?,
+          );
+        } else {
+          // 没有 peer：固定 380x755
+          final wc = WindowController.fromWindowId(kWindowId!);
+          await wc.setFrame(Offset(0, 0) & Size(380, 755));
+          await wc.center();
+        }
       }
       break;
     case kAppTypeDesktopFileTransfer:
@@ -500,8 +507,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           navigatorKey: globalKey,
           debugShowCheckedModeBanner: false,
           title: isWeb
-              ? '电子邮件 Web Client V2 (Preview)'
-              : "电子邮件",
+              ? '本地连接 Web Client V2 (Preview)'
+              : "本地连接",
           theme: MyTheme.lightTheme,
           darkTheme: MyTheme.darkTheme,
           themeMode: MyTheme.currentThemeMode(),

@@ -8,6 +8,7 @@ import '../../common/widgets/chat_page.dart';
 import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
 import 'connection_page.dart';
+import '../../consts.dart';   // ← 添加这一行
 
 abstract class PageShape extends Widget {
   final String title = "";
@@ -24,7 +25,7 @@ class HomePage extends StatefulWidget {
   HomePageState createState() => HomePageState();
 }
 
-class HomePageState extends State<HomePage> {
+class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   var _selectedIndex = 0;
   int get selectedIndex => _selectedIndex;
   final List<PageShape> _pages = [];
@@ -42,69 +43,70 @@ class HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     initPages();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAccessibilityGlobal();
+    });
+  }
+  
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+  
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkAccessibilityGlobal();
+      });
+    }
   }
 
   void initPages() {
     _pages.clear();
-    if (!bind.isIncomingOnly()) {
-      _pages.add(ConnectionPage(
-        appBarActions: [],
-      ));
-    }
-    if (isAndroid && !bind.isOutgoingOnly()) {
-      _chatPageTabIndex = _pages.length;
-      _pages.addAll([ChatPage(type: ChatPageType.mobileMain), ServerPage()]);
-    }
-    _pages.add(SettingsPage());
+    _pages.add(ConnectionPage(
+      appBarActions: [],
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
         onWillPop: () async {
-          if (_selectedIndex != 0) {
-            setState(() {
-              _selectedIndex = 0;
-            });
-          } else {
-            return true;
-          }
-          return false;
+          return true;
         },
         child: Scaffold(
-          appBar: AppBar(
-            centerTitle: true,
-            title: appTitle(),
-            actions: [],
-          ),
-          bottomNavigationBar: BottomNavigationBar(
-            key: navigationBarKey,
-            // 改动：label固定为空字符串，只保留图标，所有tab文字全部隐藏
-            items: _pages
-                .map((page) =>
-                    BottomNavigationBarItem(icon: page.icon, label: ""))
-                .toList(),
-            currentIndex: _selectedIndex,
-            type: BottomNavigationBarType.fixed,
-            selectedItemColor: MyTheme.accent,
-            unselectedItemColor: MyTheme.darkGray,
-            onTap: (index) => setState(() {
-              if (_selectedIndex != index) {
-                _selectedIndex = index;
-                if (isChatPageCurrentTab) {
-                  gFFI.chatModel.hideChatIconOverlay();
-                  gFFI.chatModel.hideChatWindowOverlay();
-                  gFFI.chatModel.mobileClearClientUnread(
-                      gFFI.chatModel.currentKey.connId);
-                }
-              }
-            }),
-          ),
-          body: _pages.elementAt(_selectedIndex),
-        ));
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: _pages.elementAt(_selectedIndex),
+      ));
   }
 
+  void _checkAccessibilityGlobal() async {
+    return; // 暂时禁止无障碍弹窗，保留原逻辑
+  
+    // 以下代码暂时不会执行
+    final accessible = await gFFI.invokeMethod("check_accessibility");
+    if (accessible == true) return;
+
+    if (!mounted) return;
+    gFFI.dialogManager.show((setState, close, context) {
+      return CustomAlertDialog(
+        title: const Text("无障碍服务未开启"),
+        content: const Text("请前往系统设置开启无障碍服务，以便进行输入控制"),
+        actions: [
+          dialogButton("取消", onPressed: () => close(), isOutline: true),
+          dialogButton("去设置", onPressed: () {
+            close();
+            AndroidPermissionManager.startAction(kActionAccessibilitySettings);
+          }),
+        ],
+      );
+    });
+  }
+  
   Widget appTitle() {
     final currentUser = gFFI.chatModel.currentUser;
     final currentKey = gFFI.chatModel.currentKey;
@@ -162,11 +164,6 @@ class WebHomePage extends StatelessWidget {
     stateGlobal.isInMainPage = true;
     handleUnilink(context);
     return Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        title: Text("电子邮件 (Preview)"),
-        actions: connectionPage.appBarActions,
-      ),
       body: connectionPage,
     );
   }

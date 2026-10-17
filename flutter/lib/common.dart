@@ -2105,7 +2105,7 @@ Future<bool> restoreWindowPosition(WindowType type,
           await wc.center();
         } else {
           final frame = Rect.fromLTWH(
-              offsetLeftTop.dx, offsetLeftTop.dy, size.width, size.height);
+              offsetLeftTop.dx, offsetLeftTop.dy, 380, 755);
           await wc.setFrame(frame);
         }
       }
@@ -3364,12 +3364,12 @@ openMonitorInNewTabOrWindow(int i, String peerId, PeerInfo pi,
 setNewConnectWindowFrame(int windowId, String peerId, int preSessionCount,
     WindowType windowType, int? display, Rect? screenRect) async {
   if (screenRect == null) {
-    // Do not restore window position to new connection if there's a pre-session.
-    // https://github.com/rustdesk/rustdesk/discussions/8825
     if (preSessionCount == 0) {
       await restoreWindowPosition(windowType,
           windowId: windowId, display: display, peerId: peerId);
     }
+    await WindowController.fromWindowId(windowId)
+        .setFrame(Offset(0, 0) & Size(380, 755));
   } else {
     await tryMoveToScreenAndSetFullscreen(screenRect);
   }

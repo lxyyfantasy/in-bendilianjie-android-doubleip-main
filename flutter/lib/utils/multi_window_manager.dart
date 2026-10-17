@@ -157,15 +157,17 @@ class RustDeskMultiWindowManager {
     }
     final windowId = windowController.windowId;
     if (!withScreenRect) {
+      // 没有 peer：固定 380x755，居中
       windowController
-        ..setFrame(const Offset(0, 0) &
-            Size(1280 + windowId * 20, 720 + windowId * 20))
+        ..setFrame(Offset(0, 0) & Size(380, 755))
         ..center()
         ..setTitle(getWindowNameWithId(
           remoteId,
           overrideType: type,
         ));
     } else {
+      // 有 peer：先给个兜底尺寸，随后会被 restoreWindowPosition 覆盖
+      windowController.setFrame(Offset(0, 0) & Size(380, 755));
       windowController.setTitle(getWindowNameWithId(
         remoteId,
         overrideType: type,
@@ -201,12 +203,24 @@ class RustDeskMultiWindowManager {
         for (final windowId in windows) {
           if (_inactiveWindows.contains(windowId)) {
             if (screenRect == null) {
+              // 没有 peer：固定 380x755，居中
+              WindowController.fromWindowId(windowId)
+                ..setFrame(Offset(0, 0) & Size(380, 755))
+                ..center();
+            } else {
+              // 有 peer：优先恢复之前保存的位置和尺寸
               await restoreWindowPosition(type,
                   windowId: windowId, peerId: remoteId);
             }
             await DesktopMultiWindow.invokeMethod(windowId, methodName, msg);
             if (methodName != kWindowEventNewRemoteDesktop) {
               WindowController.fromWindowId(windowId).show();
+              if (screenRect == null) {
+                // 没有 peer：显示后再锁一次，防止子窗口改尺寸
+                WindowController.fromWindowId(windowId)
+                  ..setFrame(Offset(0, 0) & Size(380, 755))
+                  ..center();
+              }
             }
             registerActiveWindow(windowId);
             return MultiWindowCallResult(windowId, null);

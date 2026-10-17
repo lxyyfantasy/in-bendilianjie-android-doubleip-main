@@ -3010,6 +3010,14 @@ pub mod server_side {
     }
 
     #[no_mangle]
+    pub unsafe extern "system" fn Java_ffi_FFI_reloadExternalServers(
+        _env: JNIEnv,
+        _class: JClass,
+    ) {
+        hbb_common::config::Config::reload_external_servers();
+    }
+
+    #[no_mangle]
     pub unsafe extern "system" fn Java_ffi_FFI_translateLocale(
         env: JNIEnv,
         _class: JClass,
