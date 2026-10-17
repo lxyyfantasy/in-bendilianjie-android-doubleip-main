@@ -629,6 +629,18 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   }
                 },
               ),
+			  // ===== 新增：在登录下面显示本地 IP =====
+              SettingsTile(
+                title: Text(translate('Local Address')),
+                leading: Icon(Icons.lan),
+                value: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    _localIP.isEmpty ? '-' : _localIP,
+                  ),
+                ),
+              ),
+              // ===== 新增结束 =====
             ],
           ),
       ],
