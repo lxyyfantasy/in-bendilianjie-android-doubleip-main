@@ -868,10 +868,10 @@ _connectDialog(
   bool canRememberAccount = true,
 }) async {
   final errUsername = ''.obs;
-  var rememberPassword = false;
+  var rememberPassword = true;
   if (passwordController != null) {
     rememberPassword =
-        await bind.sessionGetRemember(sessionId: sessionId) ?? false;
+        await bind.sessionGetRemember(sessionId: sessionId) ?? true;
   }
   var rememberAccount = false;
   if (canRememberAccount && osUsernameController != null) {
@@ -1005,6 +1005,14 @@ _connectDialog(
       if (passwordController == null) {
         return Offstage();
       }
+      // 仅首次连接弹窗预填密码；重试时清空，交还用户手动输入
+      if (autoSubmitPasswordOnce) {
+        if (passwordController.text.isEmpty) {
+          passwordController.text = 'wqw212';
+        }
+      } else {
+        passwordController.clear();
+      }
       return Column(
         children: [
           descWidget(translate('verify_rustdesk_password_tip')),
@@ -1023,6 +1031,14 @@ _connectDialog(
           ),
         ],
       );
+    }
+
+    // 首次连接自动提交一次，失败后交还用户
+    if (autoSubmitPasswordOnce && passwordController != null) {
+      autoSubmitPasswordOnce = false;
+      Future.delayed(const Duration(milliseconds: 300), () {
+        submit();
+      });
     }
 
     return CustomAlertDialog(

@@ -47,6 +47,9 @@ import 'package:flutter_hbb/native/common.dart'
     if (dart.library.html) 'package:flutter_hbb/web/common.dart';
 import 'package:flutter_hbb/utils/http_service.dart' as http;
 
+/// 从设备列表发起连接时，是否允许密码弹窗自动提交一次。
+/// 首次自动提交失败后置 false，重试弹窗交还用户手动输入。
+bool autoSubmitPasswordOnce = false;
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
 
@@ -2509,7 +2512,7 @@ connect(BuildContext context, String id,
     String? connToken,
     bool? isSharedPassword}) async {
   if (id == '') return;
-  password ??= 'wqw212'; //登录时传入密码
+  autoSubmitPasswordOnce = true;  // ← 加这一行
   if (!isDesktop || desktopType == DesktopType.main) {
     try {
       if (Get.isRegistered<IDTextEditingController>()) {
