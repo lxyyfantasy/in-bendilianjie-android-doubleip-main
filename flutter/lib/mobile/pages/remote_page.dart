@@ -485,7 +485,6 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   Widget getBottomAppBar() {
-    final ffiModel = Provider.of<FfiModel>(context);
     return BottomAppBar(
       elevation: 10,
       color: MyTheme.accent,
@@ -494,70 +493,34 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
           Row(
-              children: <Widget>[
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.clear),
-                      onPressed: () {
-                        clientClose(sessionId, gFFI);
-                      },
-                    ),
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.tv),
-                      onPressed: () {
-                        setState(() => _showEdit = false);
-                        showOptions(context, widget.id, gFFI.dialogManager);
-                      },
-                    )
-                  ] +
-                  (isWebDesktop || ffiModel.viewOnly || !ffiModel.keyboard
-                      ? []
-                      : gFFI.ffiModel.isPeerAndroid
-                          ? [
-                              IconButton(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.keyboard),
-                                  onPressed: openKeyboard),
-                              IconButton(
-                                color: Colors.white,
-                                icon: const Icon(Icons.build),
-                                onPressed: () => gFFI.dialogManager
-                                    .toggleMobileActionsOverlay(ffi: gFFI),
-                              )
-                            ]
-                          : [
-                              IconButton(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.keyboard),
-                                  onPressed: openKeyboard),
-                              IconButton(
-                                color: Colors.white,
-                                icon: Icon(gFFI.ffiModel.touchMode
-                                    ? Icons.touch_app
-                                    : Icons.mouse),
-                                onPressed: () => setState(
-                                    () => _showGestureHelp = !_showGestureHelp),
-                              ),
-                            ]) +
-                  [
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.more_vert),
-                      onPressed: () {
-                        setState(() => _showEdit = false);
-                        showActions(widget.id);
-                      },
-                    ),
-                  ]),
+            children: <Widget>[
+              IconButton(
+                color: Colors.white,
+                icon: const Icon(Icons.clear),
+                onPressed: () => clientClose(sessionId, gFFI),
+              ),
+              IconButton(
+                color: Colors.white,
+                icon: const Icon(Icons.tv),
+                onPressed: () {
+                  setState(() => _showEdit = false);
+                  showOptions(context, widget.id, gFFI.dialogManager);
+                },
+              ),
+              IconButton(
+                color: Colors.white,
+                icon: const Icon(Icons.build),
+                onPressed: () =>
+                    gFFI.dialogManager.toggleMobileActionsOverlay(ffi: gFFI),
+              ),
+            ],
+          ),
           Obx(() => IconButton(
                 color: Colors.white,
-                icon: Icon(Icons.expand_more),
+                icon: const Icon(Icons.expand_more),
                 onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
                     ? null
-                    : () {
-                        setState(() => _showBar = !_showBar);
-                      },
+                    : () => setState(() => _showBar = !_showBar),
               )),
         ],
       ),
