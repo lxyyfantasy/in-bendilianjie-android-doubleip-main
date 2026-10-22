@@ -2512,7 +2512,7 @@ connect(BuildContext context, String id,
     String? connToken,
     bool? isSharedPassword}) async {
   if (id == '') return;
-  autoSubmitPasswordOnce = true;  // ← 加这一行
+  autoSubmitPasswordOnce = true;
   if (!isDesktop || desktopType == DesktopType.main) {
     try {
       if (Get.isRegistered<IDTextEditingController>()) {

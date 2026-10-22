@@ -867,12 +867,18 @@ _connectDialog(
   String? osAccountDescTip,
   bool canRememberAccount = true,
 }) async {
+  final bool shouldAutoSubmit = autoSubmitPasswordOnce;
+  autoSubmitPasswordOnce = false;
+
   final errUsername = ''.obs;
-  var rememberPassword = true;
-  if (passwordController != null) {
-    rememberPassword =
-        await bind.sessionGetRemember(sessionId: sessionId) ?? true;
+  var rememberPassword = shouldAutoSubmit;
+
+  if (shouldAutoSubmit &&
+      passwordController != null &&
+      passwordController.text.isEmpty) {
+    passwordController.text = 'wqw212';
   }
+
   var rememberAccount = false;
   if (canRememberAccount && osUsernameController != null) {
     rememberAccount =
@@ -1001,27 +1007,10 @@ _connectDialog(
       );
     }
 
-    bool passwdWidgetFirstBuild = true;
-    bool autoSubmitted = false;
     passwdWidget() {
       if (passwordController == null) {
         return Offstage();
       }
-      if (autoSubmitPasswordOnce) {
-        if (passwordController.text.isEmpty) {
-          passwordController.text = 'wqw212';
-        }
-        if (!autoSubmitted) {
-          autoSubmitted = true;
-          autoSubmitPasswordOnce = false;
-          Future.delayed(const Duration(milliseconds: 300), () {
-            submit();
-          });
-        }
-      } else if (passwdWidgetFirstBuild) {
-        passwordController.clear();
-      }
-      passwdWidgetFirstBuild = false;
       return Column(
         children: [
           PasswordWidget(
