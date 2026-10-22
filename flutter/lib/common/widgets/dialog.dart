@@ -910,7 +910,9 @@ _connectDialog(
       final osUsername = osUsernameController?.text.trim() ?? '';
       final osPassword = osPasswordController?.text.trim() ?? '';
       final password = passwordController?.text.trim() ?? '';
-      if (passwordController != null && password.isEmpty) return;
+      if (passwordController != null && password.isEmpty) {
+        return;
+      }
       if (rememberAccount) {
         bind.sessionPeerOption(
             sessionId: sessionId, name: 'os-username', value: osUsername);
