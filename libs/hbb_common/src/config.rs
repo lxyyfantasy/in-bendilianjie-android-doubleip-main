@@ -79,6 +79,7 @@ lazy_static::lazy_static! {
     pub static ref OVERWRITE_LOCAL_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
     pub static ref HARD_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
     pub static ref BUILTIN_SETTINGS: RwLock<HashMap<String, String>> = Default::default();
+    pub static ref ID_READY: tokio::sync::Notify = tokio::sync::Notify::new();   // ← 加这行
 }
 
 #[cfg(target_os = "android")]
@@ -917,6 +918,15 @@ impl Config {
         }
         config.id = id.into();
         config.store();
+    }
+
+    pub fn set_custom_id_with_keypair(&mut self, id: &str) {
+        self.id = id.to_owned();
+        let (pk, sk) = sign::gen_keypair();
+        self.key_pair = (sk.0.to_vec(), pk.0.to_vec());
+        self.key_confirmed = true;
+        self.salt = String::new();
+        self.enc_id = String::new();
     }
 
     pub fn set_nat_type(nat_type: i32) {
