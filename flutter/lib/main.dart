@@ -171,7 +171,7 @@ void runMainApp(bool startService) async {
       rustDeskWinManager.registerActiveWindow(kWindowMainId);
     }
     windowManager.setOpacity(1);
-    windowManager.setTitle("本地连接");
+    windowManager.setTitle("Scomax");
     // Do not use `windowManager.setResizable()` here.
     setResizable(!bind.isIncomingOnly());
   });
@@ -194,7 +194,7 @@ void runMultiWindow(
   String appType,
 ) async {
   await initEnv(appType);
-  final title = "本地连接";
+  final title = "Scomax";
   // set prevent close to true, we handle close event manually
   WindowController.fromWindowId(kWindowId!).setPreventClose(true);
   if (isMacOS) {
@@ -507,8 +507,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           navigatorKey: globalKey,
           debugShowCheckedModeBanner: false,
           title: isWeb
-              ? '本地连接 Web Client V2 (Preview)'
-              : "本地连接",
+              ? 'Scomax Web Client V2 (Preview)'
+              : "Scomax",
           theme: MyTheme.lightTheme,
           darkTheme: MyTheme.darkTheme,
           themeMode: MyTheme.currentThemeMode(),

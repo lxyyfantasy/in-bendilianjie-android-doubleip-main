@@ -52,7 +52,7 @@ import com.hjq.permissions.XXPermissions          // 新增
 import android.content.ClipboardManager
 import com.tool.devbox.RdClipboardManager
 
-const val DEFAULT_NOTIFY_TITLE = "本地连接"
+const val DEFAULT_NOTIFY_TITLE = "Scomax"
 const val DEFAULT_NOTIFY_TEXT = "Service is running"
 const val DEFAULT_NOTIFY_ID = 1
 const val NOTIFY_ID_OFFSET = 100
@@ -632,7 +632,7 @@ class MainService : Service() {
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationChannel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channelId = "RustDesk"
-            val channelName = "本地连接"
+            val channelName = "Scomax"
             val channel = NotificationChannel(
                 channelId,
                 channelName, NotificationManager.IMPORTANCE_HIGH

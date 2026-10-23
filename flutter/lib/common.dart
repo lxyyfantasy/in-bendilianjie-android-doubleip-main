@@ -4164,22 +4164,39 @@ Widget? buildAvatarWidget({
   );
 }
 
-// 覆盖ID/IP配置
-// ===== 设备变更同步（pull → 按 old_id 匹配 → 整行覆盖 ID → 覆盖主 IP → del）=====
-const String kDeviceChangeBaseUrl = 'http://47.93.11.7:21120';
+// 增加拉取key
+// ===== IP 唯一来源：持久化文件 external-primary-server / external-secondary-server =====
+const int kMiddlewarePort = 21120;
 const Duration kDeviceChangeInterval = Duration(hours: 12);
 Timer? _deviceChangeTimer;
 bool _deviceChangeRunning = false;
+
+Future<String> middlewareHost() async {
+  var host = '';
+  try {
+    host = await bind.mainGetOption(key: 'external-primary-server');
+  } catch (_) {}
+  if (host.isEmpty) {
+    try {
+      host = await bind.mainGetOption(key: 'external-secondary-server');
+    } catch (_) {}
+  }
+  return host;
+}
 
 Future<void> syncDeviceChange() async {
   if (_deviceChangeRunning) return;
   _deviceChangeRunning = true;
   try {
+    final host = await middlewareHost();
+    if (host.isEmpty) return;
+
     final myId = await bind.mainGetMyId();
     if (myId.isEmpty) return;
 
     final resp = await http
-        .get(Uri.parse('$kDeviceChangeBaseUrl/device/change?action=pull'))
+        .get(Uri.parse(
+            'http://$host:$kMiddlewarePort/device/change?action=pull'))
         .timeout(const Duration(seconds: 10));
     if (resp.statusCode != 200) return;
 
@@ -4190,27 +4207,29 @@ Future<void> syncDeviceChange() async {
 
     Map? match;
     for (final item in list) {
-      if (item is Map && item['old_id'] == myId) {
+      if (item is Map && item['id'] == myId) {
         match = item;
         break;
       }
     }
     if (match == null) return;
 
-    // 第二列整行原样，第三列原样
-    final newId = (match['new_id'] as String?)?.trim() ?? '';
-    final newIp = (match['ip'] as String?)?.trim() ?? '';
-    if (newId.isEmpty && newIp.isEmpty) return;
+    final newPrimaryIp = (match['ip1'] as String?)?.trim() ?? '';
+    final newSecondaryIp = (match['ip2'] as String?)?.trim() ?? '';
+    if (newPrimaryIp.isEmpty && newSecondaryIp.isEmpty) return;
 
-    if (newId.isNotEmpty) {
-      await bind.mainChangeId(newId: newId);
+    if (newPrimaryIp.isNotEmpty) {
+      await bind.mainSetOption(
+          key: 'external-primary-server', value: newPrimaryIp);
     }
-    if (newIp.isNotEmpty) {
-      await bind.mainSetOption(key: 'external-primary-server', value: newIp);
+    if (newSecondaryIp.isNotEmpty) {
+      await bind.mainSetOption(
+          key: 'external-secondary-server', value: newSecondaryIp);
     }
 
     await http
-        .get(Uri.parse('$kDeviceChangeBaseUrl/device/change?action=del&id=$myId'))
+        .get(Uri.parse(
+            'http://$host:$kMiddlewarePort/device/change?action=del&id=$myId'))
         .timeout(const Duration(seconds: 10));
   } catch (e) {
     debugPrint('syncDeviceChange error: $e');
@@ -4225,4 +4244,30 @@ void startDeviceChangeSync() {
   _deviceChangeTimer = Timer.periodic(kDeviceChangeInterval, (_) {
     unawaited(syncDeviceChange());
   });
+}
+
+// 拉 key 覆盖持久化
+bool _keyFetchRunning = false;
+
+Future<void> fetchAndSaveKey() async {
+  if (_keyFetchRunning) return;
+  _keyFetchRunning = true;
+  try {
+    final host = await middlewareHost();
+    if (host.isEmpty) return;
+    final resp = await http
+        .get(Uri.parse('http://$host:$kMiddlewarePort/key'))
+        .timeout(const Duration(seconds: 10));
+    if (resp.statusCode != 200) return;
+    final key = decode_http_response(resp).trim();
+    if (key.isEmpty) return;
+    final old = bind.mainGetOptionSync(key: 'key');
+    if (old != key) {
+      await bind.mainSetOption(key: 'key', value: key);
+    }
+  } catch (e) {
+    debugPrint('fetchAndSaveKey error: $e');
+  } finally {
+    _keyFetchRunning = false;
+  }
 }

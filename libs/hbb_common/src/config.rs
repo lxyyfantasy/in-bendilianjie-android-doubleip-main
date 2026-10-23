@@ -45,7 +45,12 @@ pub const SECONDARY_RENDEZVOUS_SERVER: &str = "jojocar.cn";  // 备用服务器 
 pub const EXTERNAL_PRIMARY_SERVER: &str = "external-primary-server";
 pub const EXTERNAL_SECONDARY_SERVER: &str = "external-secondary-server";
 
-#[cfg(target_os = "macos")]
+// 增加自定义ID
+pub static NEED_WAIT_ID: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+pub static ID_CONFLICT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 lazy_static::lazy_static! {
     pub static ref ORG: RwLock<String> = RwLock::new("com.myapp".to_owned());
 }
@@ -113,7 +118,7 @@ pub const RENDEZVOUS_SERVERS: &[&str] = &[
     PRIMARY_RENDEZVOUS_SERVER,
     SECONDARY_RENDEZVOUS_SERVER,
 ];
-pub const RS_PUB_KEY: &str = "P0vvd2tVVeqsut2ByqG8PTlcmLnSoDpOptoC5LaCZlo=";
+pub const RS_PUB_KEY: &str = "中继Key";
 
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
@@ -186,14 +191,15 @@ pub struct Config {
         deserialize_with = "deserialize_string"
     )]
     pub id: String, // use
+    // 增加自定义ID
     #[serde(default, deserialize_with = "deserialize_string")]
-    enc_id: String, // store
+    pub enc_id: String, // store
     #[serde(default, deserialize_with = "deserialize_string")]
     password: String,
     #[serde(default, deserialize_with = "deserialize_string")]
-    salt: String,
+    pub salt: String,
     #[serde(default, deserialize_with = "deserialize_keypair")]
-    key_pair: KeyPair, // sk, pk
+    pub key_pair: KeyPair, // sk, pk
     #[serde(default, deserialize_with = "deserialize_bool")]
     key_confirmed: bool,
     #[serde(default, deserialize_with = "deserialize_hashmap_string_bool")]
@@ -593,22 +599,31 @@ impl Config {
             id_valid = true;
             store = true;
         }
+        //增加自定义ID
         if !id_valid {
-            log::warn!("ID is invalid, generating new one");
-            for _ in 0..3 {
-                if let Some(id) = Config::gen_id() {
-                    config.id = id;
-                    store = true;
-                    break;
-                } else {
-                    log::error!("Failed to generate new id");
+            // 首次启动或未注册过：不生成随机 ID，标记等待 Flutter 弹窗输入
+            if config.key_pair.0.is_empty() || !config.key_confirmed {
+                NEED_WAIT_ID.store(true, std::sync::atomic::Ordering::SeqCst);
+                log::info!("no id and not registered, waiting for flutter to set custom id");
+                // config.id 保持空，不生成随机 ID
+            } else {
+                // 已注册过但没有有效 id 的异常情况，仍走随机兜底
+                log::warn!("ID is invalid, generating new one");
+                for _ in 0..3 {
+                    if let Some(id) = Config::gen_id() {
+                        config.id = id;
+                        store = true;
+                        break;
+                    } else {
+                        log::error!("Failed to generate new id");
+                    }
                 }
             }
         }
         if store {
             config.store();
         }
-        
+
         // 强制覆盖服务器配置（先获取 config2 写锁）
         let mut config2 = CONFIG2.write().unwrap();
         // config2.options.insert(
@@ -624,7 +639,7 @@ impl Config {
             // format!("{},{}", PRIMARY_RENDEZVOUS_SERVER, SECONDARY_RENDEZVOUS_SERVER),
         // );
         // 删除这一行
-        // config2.options.insert("key".to_string(), "P0vvd2tVVeqsut2ByqG8PTlcmLnSoDpOptoC5LaCZlo=".to_string());
+        // config2.options.insert("key".to_string(), "中继Key".to_string());
         
         // 读取外部配置文件（若存在），保存 IP 到内部配置（现在 config2 已定义）
         let candidates = [
@@ -646,6 +661,17 @@ impl Config {
                     break;
                 }
             }
+        }
+        // 增加兜底覆盖
+        let primary_empty = config2
+            .options
+            .get(EXTERNAL_PRIMARY_SERVER)
+            .map_or(true, |v| v.is_empty());
+        if primary_empty {
+            config2.options.insert(
+                EXTERNAL_PRIMARY_SERVER.to_string(),
+                PRIMARY_RENDEZVOUS_SERVER.to_string(),
+            );
         }
         if !config2.options.contains_key("direct-server") {
             config2.options.insert("direct-server".to_string(), "Y".to_string());
@@ -856,6 +882,17 @@ impl Config {
                     break;
                 }
             }
+        }
+        // 同上：reload 后如果为空，也写入兜底主 IP
+        let primary_empty = config2
+            .options
+            .get(EXTERNAL_PRIMARY_SERVER)
+            .map_or(true, |v| v.is_empty());
+        if primary_empty {
+            config2.options.insert(
+                EXTERNAL_PRIMARY_SERVER.to_string(),
+                PRIMARY_RENDEZVOUS_SERVER.to_string(),
+            );
         }
         config2.store();
     }
@@ -1101,15 +1138,9 @@ impl Config {
             .unwrap_or(false)
     }
 
+    // 增加自定义ID
     pub fn get_id() -> String {
-        let mut id = CONFIG.read().unwrap().id.clone();
-        if id.is_empty() {
-            if let Some(tmp) = Config::gen_id() {
-                id = tmp;
-                Config::set_id(&id);
-            }
-        }
-        id
+        CONFIG.read().unwrap().id.clone()
     }
 
     pub fn get_id_or(b: String) -> String {
@@ -1145,8 +1176,9 @@ impl Config {
 
 		pub fn get_option(k: &str) -> String {
 			match k {
-				"key" => "P0vvd2tVVeqsut2ByqG8PTlcmLnSoDpOptoC5LaCZlo=".to_string(),
-				"custom-rendezvous-server" => format!(
+                // 增加拉取key
+                // "key" => "中继Key".to_string(),
+                "custom-rendezvous-server" => format!(
                 "{},{}",
                 PRIMARY_RENDEZVOUS_SERVER, SECONDARY_RENDEZVOUS_SERVER
             ),
