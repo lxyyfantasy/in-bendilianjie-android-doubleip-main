@@ -45,6 +45,15 @@ class HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     initPages();
+    // 运行中 ID 冲突：Rust 推 need_wait_id，立刻弹窗
+    platformFFI.registerEventHandler(
+      'need_wait_id',
+      'need_wait_id',
+      (Map<String, dynamic> evt) async {
+        if (!mounted) return;
+        await _checkCustomId();
+      },
+    );
     // 增加自定义ID
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // 增加拉取key
