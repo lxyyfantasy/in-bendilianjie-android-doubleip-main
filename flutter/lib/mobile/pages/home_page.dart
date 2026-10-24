@@ -50,7 +50,6 @@ class HomePageState extends State<HomePage> {
       // 增加拉取key
       unawaited(fetchAndSaveKey());
       await _checkCustomId();
-      _checkAccessibilityGlobal();  
     });
   }
 
