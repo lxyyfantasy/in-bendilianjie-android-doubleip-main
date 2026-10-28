@@ -48,7 +48,7 @@ pub const EXTERNAL_SECONDARY_SERVER: &str = "external-secondary-server";
 // 增加自定义ID
 pub static NEED_WAIT_ID: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
-pub static ID_CONFLICT: std::sync::atomic::AtomicBool =
+pub static ID_REGISTERED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
 lazy_static::lazy_static! {
@@ -679,7 +679,7 @@ impl Config {
         }
         // 最后统一保存
         config2.store();
-		
+        
         config
     }
 
@@ -1184,8 +1184,8 @@ impl Config {
         config.store();
     }
 
-		pub fn get_option(k: &str) -> String {
-			match k {
+        pub fn get_option(k: &str) -> String {
+            match k {
                 // 增加拉取key
                 // "key" => "中继Key".to_string(),
                 "custom-rendezvous-server" => format!(

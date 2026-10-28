@@ -56,8 +56,6 @@ class HomePageState extends State<HomePage> {
     );
     // 增加自定义ID
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // 增加拉取key
-      unawaited(fetchAndSaveKey());
       await _checkCustomId();
     });
   }
