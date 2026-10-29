@@ -1052,7 +1052,7 @@ void showToast(String text,
 // - Remove argument "contentPadding", no need for it, all should look the same.
 // - Remove "required" for argument "content". See simple confirm dialog "delete peer", only title and actions are used. No need to "content: SizedBox.shrink()".
 // - Make dead code alive, transform arguments "onSubmit" and "onCancel" into correspondenting buttons "ConfirmOkButton", "CancelButton".
-class CustomAlertDialog extends StatelessWidget {
+class CustomAlertDialog extends StatefulWidget {
   const CustomAlertDialog(
       {Key? key,
       this.title,
@@ -1075,29 +1075,42 @@ class CustomAlertDialog extends StatelessWidget {
   final Function()? onCancel;
 
   @override
-  Widget build(BuildContext context) {
-    // request focus
-    FocusScopeNode scopeNode = FocusScopeNode();
-    Future.delayed(Duration.zero, () {
-      if (!scopeNode.hasFocus) scopeNode.requestFocus();
-    });
-    bool tabTapped = false;
-    if (isAndroid) gFFI.invokeMethod("enable_soft_keyboard", true);
+  State<CustomAlertDialog> createState() => _CustomAlertDialogState();
+}
 
+class _CustomAlertDialogState extends State<CustomAlertDialog> {
+  late final FocusScopeNode scopeNode;
+  bool tabTapped = false;
+
+  @override
+  void initState() {
+    super.initState();
+    scopeNode = FocusScopeNode();
+    if (isAndroid) gFFI.invokeMethod("enable_soft_keyboard", true);
+  }
+
+  @override
+  void dispose() {
+    scopeNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return FocusScope(
       node: scopeNode,
       autofocus: true,
       onKey: (node, key) {
         if (key.logicalKey == LogicalKeyboardKey.escape) {
           if (key is RawKeyDownEvent) {
-            onCancel?.call();
+            widget.onCancel?.call();
           }
-          return KeyEventResult.handled; // avoid TextField exception on escape
+          return KeyEventResult.handled;
         } else if (!tabTapped &&
-            onSubmit != null &&
+            widget.onSubmit != null &&
             (key.logicalKey == LogicalKeyboardKey.enter ||
                 key.logicalKey == LogicalKeyboardKey.numpadEnter)) {
-          if (key is RawKeyDownEvent) onSubmit?.call();
+          if (key is RawKeyDownEvent) widget.onSubmit?.call();
           return KeyEventResult.handled;
         } else if (key.logicalKey == LogicalKeyboardKey.tab) {
           if (key is RawKeyDownEvent) {
@@ -1110,15 +1123,15 @@ class CustomAlertDialog extends StatelessWidget {
       },
       child: AlertDialog(
           scrollable: true,
-          title: title,
+          title: widget.title,
           content: ConstrainedBox(
-            constraints: contentBoxConstraints,
-            child: content,
+            constraints: widget.contentBoxConstraints,
+            child: widget.content,
           ),
-          actions: actions,
-          titlePadding: titlePadding ?? MyTheme.dialogTitlePadding(),
+          actions: widget.actions,
+          titlePadding: widget.titlePadding ?? MyTheme.dialogTitlePadding(),
           contentPadding:
-              MyTheme.dialogContentPadding(actions: actions is List),
+              MyTheme.dialogContentPadding(actions: widget.actions is List),
           actionsPadding: MyTheme.dialogActionsPadding(),
           buttonPadding: MyTheme.dialogButtonPadding),
     );

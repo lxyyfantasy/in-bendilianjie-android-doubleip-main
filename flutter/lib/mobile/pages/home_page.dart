@@ -178,13 +178,6 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
         if (!completer.isCompleted) completer.complete();
       }
 
-      // 弹窗显示后延迟一次请求焦点，避免 autofocus 重建导致键盘闪
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Future.delayed(const Duration(milliseconds: 100), () {
-          FocusScope.of(context).requestFocus(FocusNode());
-        });
-      });
-
       return CustomAlertDialog(
         title: const Text('设置ID'),
         content: Column(
