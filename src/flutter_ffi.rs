@@ -181,7 +181,19 @@ pub fn main_clear_id_conflict() {
 }
 
 pub fn main_need_wait_id() -> bool {
-    hbb_common::config::NEED_WAIT_ID.load(std::sync::atomic::Ordering::SeqCst)
+    if hbb_common::config::NEED_WAIT_ID.load(std::sync::atomic::Ordering::SeqCst) {
+        return true;
+    }
+    // 兜底：配置尚未初始化或首次启动时，主动判断
+    let id_empty = hbb_common::config::Config::get_id().is_empty();
+    let no_key = hbb_common::config::Config::get_existing_key_pair().is_none();
+    if id_empty && no_key {
+        hbb_common::config::NEED_WAIT_ID
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        true
+    } else {
+        false
+    }
 }
 
 pub fn session_add_sync(

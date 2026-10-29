@@ -144,64 +144,73 @@ class HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _showCustomIdDialog();
   }
   
-  Future<void> _showCustomIdDialog() {
+    Future<void> _showCustomIdDialog() {
     final completer = Completer<void>();
     final controller = TextEditingController();
-    String? errorMsg;
-    bool submitting = false;
-  
+    final errorNotifier = ValueNotifier<String?>(null);
+    final submittingNotifier = ValueNotifier<bool>(false);
+
     gFFI.dialogManager.show((setState, close, context) {
       submit() async {
-        if (submitting) return;
+        if (submittingNotifier.value) return;
         final id = controller.text.trim();
         if (id.isEmpty) {
-          setState(() => errorMsg = '请输入ID');
+          errorNotifier.value = '请输入ID';
           return;
         }
         if (!RegExp(r'^[a-zA-Z]').hasMatch(id)) {
-          setState(() => errorMsg = '必须以字母开头');
+          errorNotifier.value = '必须以字母开头';
           return;
         }
         if (id.length < 6 || id.length > 16) {
-          setState(() => errorMsg = '长度必须是6-16位');
+          errorNotifier.value = '长度必须是6-16位';
           return;
         }
         if (!RegExp(r'^[a-zA-Z][\w-]{5,15}$').hasMatch(id)) {
-          setState(() => errorMsg = '只能包含字母、数字、下划线、连字符');
+          errorNotifier.value = '只能包含字母、数字、下划线、连字符';
           return;
         }
-        setState(() {
-          submitting = true;
-          errorMsg = null;
-        });
+        errorNotifier.value = null;
+        submittingNotifier.value = true;
         await bind.mainClearIdConflict();
         await bind.mainSetCustomId(id: id);
         close();
         if (!completer.isCompleted) completer.complete();
       }
-  
+
+      // 弹窗显示后延迟一次请求焦点，避免 autofocus 重建导致键盘闪
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(const Duration(milliseconds: 100), () {
+          FocusScope.of(context).requestFocus(FocusNode());
+        });
+      });
+
       return CustomAlertDialog(
         title: const Text('设置ID'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: controller,
-              autofocus: true,
-              cursorColor: const Color(0xFF2E7D32),
-              decoration: InputDecoration(
-                labelText: '设备ID',
-                errorText: errorMsg,
-                labelStyle: const TextStyle(color: Colors.black54),
-                floatingLabelStyle: const TextStyle(color: Color(0xFF2E7D32)),
-                enabledBorder: const UnderlineInputBorder(
-                  borderSide: BorderSide(color: Colors.black38),
-                ),
-                focusedBorder: const UnderlineInputBorder(
-                  borderSide: BorderSide(color: Color(0xFF2E7D32), width: 1.5),
-                ),
-              ),
-            ).workaroundFreezeLinuxMint(),
+            ValueListenableBuilder<String?>(
+              valueListenable: errorNotifier,
+              builder: (context, errorMsg, _) {
+                return TextField(
+                  controller: controller,
+                  cursorColor: const Color(0xFF2E7D32),
+                  decoration: InputDecoration(
+                    labelText: '设备ID',
+                    errorText: errorMsg,
+                    labelStyle: const TextStyle(color: Colors.black54),
+                    floatingLabelStyle: const TextStyle(color: Color(0xFF2E7D32)),
+                    enabledBorder: const UnderlineInputBorder(
+                      borderSide: BorderSide(color: Colors.black38),
+                    ),
+                    focusedBorder: const UnderlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFF2E7D32), width: 1.5),
+                    ),
+                  ),
+                ).workaroundFreezeLinuxMint();
+              },
+            ),
             const SizedBox(height: 8),
             const Text(
               '以字母开头，6-16位，仅限字母、数字、下划线、连字符',

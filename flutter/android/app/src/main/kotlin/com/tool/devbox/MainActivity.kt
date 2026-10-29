@@ -410,6 +410,11 @@ class MainActivity : FlutterActivity() {
         super.onStop()
         val disableFloatingWindow = FFI.getLocalOption("disable-floating-window") == "Y"
         if (!disableFloatingWindow && MainService.isReady) {
+            // 未授权悬浮窗时不启动 FloatingWindowService，避免跳设置页
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                Log.d(logTag, "no overlay permission, skip floating window")
+                return
+            }
             startService(Intent(this, FloatingWindowService::class.java))
         }
     }
