@@ -26,7 +26,7 @@ class HomePage extends StatefulWidget {
   HomePageState createState() => HomePageState();
 }
 
-class HomePageState extends State<HomePage> {
+class HomePageState extends State<HomePage> with WidgetsBindingObserver {
   var _selectedIndex = 0;
   int get selectedIndex => _selectedIndex;
   final List<PageShape> _pages = [];
@@ -42,6 +42,21 @@ class HomePageState extends State<HomePage> {
   }
   
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _checkCustomId();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
     initPages();
@@ -54,6 +69,7 @@ class HomePageState extends State<HomePage> {
         await _checkCustomId();
       },
     );
+    WidgetsBinding.instance.addObserver(this);
     // 增加自定义ID
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _checkCustomId();

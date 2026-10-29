@@ -93,6 +93,26 @@ impl RendezvousMediator {
             crate::platform::linux_desktop_manager::start_xdesktop();
         }
         scrap::codec::test_av1();
+        // 增加自定义ID
+        // 未注册过时，等待 Flutter 弹窗写入自定义 ID；每 60 秒检查一次，永不放弃
+        #[cfg(target_os = "android")]
+        {
+            loop {
+                if !hbb_common::config::NEED_WAIT_ID.load(std::sync::atomic::Ordering::SeqCst) {
+                    break;
+                }
+                if !Config::get_id().is_empty() {
+                    log::info!("custom id ready: {}", Config::get_id());
+                    break;
+                }
+                log::info!("waiting for flutter to set custom id...");
+                let _ = tokio::time::timeout(
+                    std::time::Duration::from_secs(60),
+                    hbb_common::config::ID_READY.notified(),
+                )
+                .await;
+            }
+        }
         loop {
             let timeout = Arc::new(RwLock::new(CONNECT_TIMEOUT));
             let conn_start_time = Instant::now();
@@ -224,7 +244,7 @@ impl RendezvousMediator {
                             reg_timeout += MIN_REG_TIMEOUT;
                         }
                     }
-                    if hbb_common::config::ID_REGISTERED.load(Ordering::SeqCst) {
+                    if hbb_common::config::NEED_WAIT_ID.load(Ordering::SeqCst) {
                         continue;
                     }
                     if timeout || (last_register_sent.is_none() && expired) {
@@ -279,10 +299,6 @@ impl RendezvousMediator {
                         Config::set_key_confirmed(true);
                         Config::set_host_key_confirmed(&self.host_prefix, true);
                         *SOLVING_PK_MISMATCH.lock().await = "".to_owned();
-                        // 注册成功：hbbs 已接受当前 ID
-                        hbb_common::config::ID_REGISTERED
-                            .store(true, std::sync::atomic::Ordering::SeqCst);
-                        hbb_common::config::LocalConfig::set_option("id-registered".into(), "Y".into());
                     }
                     Ok(register_pk_response::Result::UUID_MISMATCH) => {
                         self.handle_uuid_mismatch(sink).await?;
@@ -379,10 +395,12 @@ impl RendezvousMediator {
                     if last_recv_msg.elapsed().as_millis() as u64 > rz.keep_alive as u64 * 3 / 2 {
                         bail!("Rendezvous connection is timeout");
                     }
-                    if !hbb_common::config::ID_REGISTERED.load(Ordering::SeqCst)
-                        && (!Config::get_key_confirmed() ||
-                            !Config::get_host_key_confirmed(&rz.host_prefix))
-                        && last_register_sent.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL) >= REG_INTERVAL {
+                    if hbb_common::config::NEED_WAIT_ID.load(Ordering::SeqCst) {
+                        continue;
+                    }
+                    if (!Config::get_key_confirmed() ||
+                        !Config::get_host_key_confirmed(&rz.host_prefix)) &&
+                        last_register_sent.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL) >= REG_INTERVAL {
                         rz.register_pk(Sink::Stream(&mut conn)).await?;
                         last_register_sent = Some(Instant::now());
                     }
